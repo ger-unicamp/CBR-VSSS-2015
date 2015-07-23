@@ -1,0 +1,8 @@
+areaL=274
+areaH=405
+hH=180
+hL=0
+sH=255
+sL=0
+vH=255
+vL=0

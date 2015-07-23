@@ -1,0 +1,7 @@
+# Arquivos e Diretórios que não devem ser comitados para o repositório.
+
+# Pasta com arquivos gerados ao executar o make. 
+CMakeFiles
+
+# Executável gerado ao compilar o programa.
+cbr-vsss
