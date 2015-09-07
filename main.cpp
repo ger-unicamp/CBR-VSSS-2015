@@ -62,44 +62,10 @@ int main( int argc, char* argv[] )
 	}
 	cout << "Init video: End" << endl;
 
-	cout << "----- MÉTODO arduino-serial -----" << endl;
-	// https://github.com/todbot/arduino-serial
-	// http://todbot.com/blog/2006/12/06/arduino-serial-c-code-to-talk-to-arduino/
-    
-    const int buf_max = 100;
+    char serialPort[] = "/dev/tty.usbmodem1421";
 
-    int fd = -1;
-    char serialport[buf_max];
-    int baudrate = 9600;  // default
-    char quiet = 0;
-    char eolchar = '\n';
-    int timeout = 1;
-    char buf[buf_max];
-    int rc,n;
-    char serialPort[] = "/dev/cu.usbmodem1421";
-    char input[] = "S1#1#300#1#300E";
-/*
-    fd = serialport_init(serialPort, baudrate);
-    if (fd == -1) error("couldn't open port\n");
-    cout << "opened port: " << serialPort << endl;
-    serialport_flush(fd);
-    
-    if (fd == -1) error("serial port not opened\n");
-    // sprintf(buf, (opt=='S' ? "%s\n" : "%s"), optarg);
-    cout << "send string: " << input << endl;
-    rc = serialport_write(fd, input);
-    if (rc == -1) error("error writing\n");
-    
-    if (fd == -1) error("serial port not opened\n");
-    memset(buf, 0, buf_max);  //
-    serialport_read_until(fd, buf, eolchar, buf_max, timeout);
-    cout << "read string: " << buf << endl;
-
-    serialport_close(fd);
-    cout << "closed port " << serialport << endl;
-*/
 	// Variáveis para quando for o jogo
-	int disableTrackbars = FALSE;
+	int disableTrackbars = TRUE;
 
 	// Variáveis relativas ao campo;
 	int statusCampo = CAMPO_NAO_ENCONTRADO;
@@ -178,6 +144,11 @@ int main( int argc, char* argv[] )
 		Mat imgOriginal, // Imagem Original - Nunca é alterada!
 			imgAnalise, // Imagem utilizada para ver os resultados de identificação na imagem original.
 			imgTransformada, // Imagem transformada do campo, após este ser localizado
+			imgYCrCb,
+			imgXYZ,
+			imgHLS,
+			imgLab,
+			imgLuv,
 			imgHSV, // Imagem com as componentes HSV
 			imgThresholded, // Imagem a qual são aplicados filtros para encontrar os polígonos na imagem
 			imgContrastRGB,
@@ -185,6 +156,13 @@ int main( int argc, char* argv[] )
 			imgPlayersRGB = Mat::zeros(imgThresholded.size(), CV_8UC3), // Imagem (RGB) apenas dos jogadores
 			mask_image = Mat::zeros(imgThresholded.size(), CV_8UC3), // Imagem de máscara para filtrar os jogadores
 			imgPlayersHSV = Mat::zeros(imgThresholded.size(), CV_8UC3); // Imagem (HSV) apenas dos jogadores
+
+		vector<Mat> channelsYCrCb(3),
+					channelsXYZ(3),
+					channelsHLS(3),
+					channelsLab(3),
+					channelsLuv(3),
+					channelsHSV(3);
 
 		achouCampo = FALSE;
 
@@ -196,11 +174,81 @@ int main( int argc, char* argv[] )
 		}
 
 		// imgAnalise = imgOriginal;
-		imgOriginal.convertTo(imgContrastRGB, -1, 1, contrast);
+
+/**
+	Mat::convertTo
+	Converts an array to another data type with optional scaling.
+
+	C++: void Mat::convertTo(OutputArray m, int rtype, double alpha=1, double beta=0 ) const
+	Parameters:	
+	m – output matrix; if it does not have a proper size or type before the operation, it is reallocated.
+	rtype – desired output matrix type or, rather, the depth since the number of channels are the same as the input has; if rtype is negative, the output matrix will have the same type as the input.
+	alpha – optional scale factor.
+	beta – optional delta added to the scaled values.
+**/
+
+		// imgOriginal.convertTo(imgContrastRGB, -1, 1, contrast);
 		// cvtColor(imgContrastRGB, imgContrastHSV, COLOR_BGR2HSV);
 
+		/** Tipos de Luzes
+		 *	Luz acromática - seu único atributo é a intensidade (ou a quantidade);
+		 *	Luz cromática  - engloba o espectro de energia eletromagnética visível.
+		 */
+
+		/** YCrCb
+		 * 	Modelo de representação da cor dedicado ao vídeo analógico.
+		 *	O parâmero Y representa a luminância (ou seja a informação a preto e branco),
+		 *	enquanto U e V permitem representar a corminância, ou seja, a informação sobre a cor.
+		 */
+		cvtColor(imgOriginal, imgYCrCb, COLOR_BGR2YCrCb);
+
+		/** XYZ
+		 *	O Y representa o valor de luminância (brilho), Z como próximo ao estímulo azul e X uma
+		 * 	mistura (combinação linear) de estímulos escolhida para ser não negativo.
+		 */
+		cvtColor(imgOriginal, imgXYZ, COLOR_BGR2XYZ);
+
+		/** HLS
+		 *	Hue (matiz) - Define o componente de cor;
+		 *	Lightness (brilho)
+		 *	Saturation (saturação) - define o quão "pura" é a cor, ou se ela está misturada com
+		 *		outras cores (complementar), tornando-se mais pálida.
+		 */
+		cvtColor(imgOriginal, imgHLS, COLOR_BGR2HLS);
+
+		/** Lab e Luv
+		 *	L = 0, produz preto; L = 100, branco difuso;
+		 *	a < 0 indica cor próxima ao verde e a > 0 cor próxima ao magenta;
+		 *	b < 0 indica cor próxima ao azul e b > 0 cor próxima ao amarelo.
+		 */
+		cvtColor(imgOriginal, imgLab, COLOR_BGR2Lab);
+		cvtColor(imgOriginal, imgLuv, COLOR_BGR2Luv);
+
+		/** HSV
+		 *	Hue (matiz) - Define o componente de cor;
+		 *	Saturation (saturação) - define o quão "pura" é a cor, ou se ela está misturada com
+		 *		outras cores (complementar), tornando-se mais pálida.
+		 *	Value (valor/brilho) - define a quantidade de luz na mistura, quanto mais luz mais
+		 *		clara a cor (na ausência de valor, a imagem é toda preta)
+		 */
 		cvtColor(imgOriginal, imgHSV, COLOR_BGR2HSV); //Convert the captured frame from BGR to HSV
 
+		resize(imgOriginal, imgOriginal, Size(0,0), 0.3, 0.3, INTER_LINEAR);
+		resize(imgYCrCb, imgYCrCb, Size(0,0), 0.3, 0.3, INTER_LINEAR);
+		resize(imgXYZ, imgXYZ, Size(0,0), 0.3, 0.3, INTER_LINEAR);
+		resize(imgHLS, imgHLS, Size(0,0), 0.3, 0.3, INTER_LINEAR);
+		resize(imgLab, imgLab, Size(0,0), 0.3, 0.3, INTER_LINEAR);
+		resize(imgLuv, imgLuv, Size(0,0), 0.3, 0.3, INTER_LINEAR);
+		resize(imgHSV, imgHSV, Size(0,0), 0.3, 0.3, INTER_LINEAR);
+
+		split(imgYCrCb, channelsYCrCb);
+		split(imgXYZ, channelsXYZ);
+		split(imgHLS, channelsHLS);
+		split(imgLab, channelsLab);
+		split(imgLuv, channelsLuv);
+		split(imgHSV, channelsHSV);
+
+/*********
 		vector<Mat> channels; 
        	Mat imgHistEqualized;
 
@@ -404,9 +452,89 @@ int main( int argc, char* argv[] )
 		// 	cout << endl;
 		// }
 		// cout << "END" << endl;
+**********/
 
 	    namedWindow("imgOriginal", WINDOW_AUTOSIZE);
 	    imshow("imgOriginal", imgOriginal); //show the thresholded image
+/*
+	    // YCrCb
+	    namedWindow("imgYCrCb", WINDOW_AUTOSIZE);
+	    imshow("imgYCrCb", imgYCrCb);
+
+	    namedWindow("channelsYCrCb[0]", WINDOW_AUTOSIZE);
+	    imshow("channelsYCrCb[0]", channelsYCrCb[0]);
+
+	    namedWindow("channelsYCrCb[1]", WINDOW_AUTOSIZE);
+	    imshow("channelsYCrCb[1]", channelsYCrCb[1]);
+
+	    namedWindow("channelsYCrCb[2]", WINDOW_AUTOSIZE);
+	    imshow("channelsYCrCb[2]", channelsYCrCb[2]);
+
+	    // XYZ
+	    namedWindow("imgXYZ", WINDOW_AUTOSIZE);
+	    imshow("imgXYZ", imgXYZ);
+
+	    namedWindow("channelsXYZ[0]", WINDOW_AUTOSIZE);
+	    imshow("channelsXYZ[0]", channelsXYZ[0]);
+
+	    namedWindow("channelsXYZ[1]", WINDOW_AUTOSIZE);
+	    imshow("channelsXYZ[1]", channelsXYZ[1]);
+
+	    namedWindow("channelsXYZ[2]", WINDOW_AUTOSIZE);
+	    imshow("channelsXYZ[2]", channelsXYZ[2]);
+
+	    // HLS
+	    namedWindow("imgHLS", WINDOW_AUTOSIZE);
+	    imshow("imgHLS", imgHLS);
+
+	    namedWindow("channelsHLS[0]", WINDOW_AUTOSIZE);
+	    imshow("channelsHLS[0]", channelsHLS[0]);
+
+	    namedWindow("channelsHLS[1]", WINDOW_AUTOSIZE);
+	    imshow("channelsHLS[1]", channelsHLS[1]);
+
+	    namedWindow("channelsHLS[2]", WINDOW_AUTOSIZE);
+	    imshow("channelsHLS[2]", channelsHLS[2]);
+
+	    // Lab
+	    namedWindow("imgLab", WINDOW_AUTOSIZE);
+	    imshow("imgLab", imgLab);
+
+	    namedWindow("channelsLab[0]", WINDOW_AUTOSIZE);
+	    imshow("channelsLab[0]", channelsLab[0]);
+
+	    namedWindow("channelsLab[1]", WINDOW_AUTOSIZE);
+	    imshow("channelsLab[1]", channelsLab[1]);
+
+	    namedWindow("channelsLab[2]", WINDOW_AUTOSIZE);
+	    imshow("channelsLab[2]", channelsLab[2]);
+
+	    // Luv
+	    namedWindow("imgLuv", WINDOW_AUTOSIZE);
+	    imshow("imgLuv", imgLuv);
+
+	    namedWindow("channelsLuv[0]", WINDOW_AUTOSIZE);
+	    imshow("channelsLuv[0]", channelsLuv[0]);
+
+	    namedWindow("channelsLuv[1]", WINDOW_AUTOSIZE);
+	    imshow("channelsLuv[1]", channelsLuv[1]);
+
+	    namedWindow("channelsLuv[2]", WINDOW_AUTOSIZE);
+	    imshow("channelsLuv[2]", channelsLuv[2]);
+
+	    // HSV
+	    namedWindow("imgHSV", WINDOW_AUTOSIZE);
+	    imshow("imgHSV", imgHSV);
+
+	    namedWindow("channelsHSV[0]", WINDOW_AUTOSIZE);
+	    imshow("channelsHSV[0]", channelsHSV[0]);
+
+	    namedWindow("channelsHSV[1]", WINDOW_AUTOSIZE);
+	    imshow("channelsHSV[1]", channelsHSV[1]);
+
+	    namedWindow("channelsHSV[2]", WINDOW_AUTOSIZE);
+	    imshow("channelsHSV[2]", channelsHSV[2]);
+*/
 
 		// namedWindow("imgHistEqualized", WINDOW_NORMAL);
 		// imshow( "imgHistEqualized", imgHistEqualized);
@@ -563,4 +691,16 @@ void createTrackbarsGlobal() {
 	// createTrackbar("hGreenH", "Control Green", &hGreenH, 180);
 	// createTrackbar("sGreenL", "Control Green", &sGreenL, 255);
 	// createTrackbar("sGreenH", "Control Green", &sGreenH, 255);
+}
+
+void sendCommands(char serialPort[], int robot, int directionRight, int speedRight, int directionLeft, int speedLeft) {
+    char data[] = {'S', robot, '#', directionRight, '#', speedRight, '#', directionLeft, '#', speedLeft, 'E'};
+    FILE *file;
+    file = fopen(serialPort, "w"); // Opening usb device file. 
+    int i = 0;
+    for (i = 0 ; i < 13 ; i++) {
+        fprintf(file, "%c", data[i]); // Writing to the file.
+        //printf("%c\n", (char) data[i]);
+    }
+    fclose(file);
 }
