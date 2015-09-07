@@ -44,13 +44,20 @@ void loop(void)
   //Pump the network regularly
   network.update();
     
-  if(Serial.available())
-  {
-    Serial.readBytesUntil( 'E', buffer, 20);
+  if (Serial.available()) {
 
+    int indexBuffer = 0;
+    int input = 0;
+    while ((char) input != 'E') {
+      input = Serial.read();
+      if (input != -1) {
+        buffer[indexBuffer] = (char) input;
+        indexBuffer += 1;
+      }
+    }
+    
     int n = sscanf(buffer, "S%d#%d#%d#%d#%dE", &rob, &(order.dirR), &(order.speedR), &(order.dirL), &(order.speedL));
-    if(n==5)
-    {
+    if (n == 5) {
       
       Serial.print("RECEIVED: ");
       Serial.print(rob);
@@ -64,12 +71,13 @@ void loop(void)
       Serial.println(order.speedL);
   
       Serial.print("transmiting... ");
-      RF24NetworkHeader header( rob);
-      bool ok = network.write(header,&order,sizeof(order));
+      RF24NetworkHeader header(rob);
+      bool ok = network.write(header, &order, sizeof(order));
       if (ok)
   	Serial.println("ok.");
       else
   	Serial.println("failed.");
-    }	
+    }
   }
 }
+
