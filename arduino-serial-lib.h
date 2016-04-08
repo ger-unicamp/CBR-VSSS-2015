@@ -9,6 +9,7 @@
 #define __ARDUINO_SERIAL_LIB_H__
 
 #include <stdint.h>   // Standard types 
+#include "arduino-serial-lib.c"
 
 int serialport_init(const char* serialport, int baud);
 int serialport_close(int fd);

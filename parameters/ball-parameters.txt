@@ -1,8 +1,8 @@
-areaL=274
-areaH=405
-hH=180
-hL=0
-sH=255
-sL=0
+areaL=40
+areaH=70
+hL=11
+hH=34
+sL=114
+sH=254
+vL=154
 vH=255
-vL=0

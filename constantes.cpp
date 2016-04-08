@@ -26,3 +26,5 @@
 #define COR_AMARELO 		Scalar(  0, 255, 255)
 #define COR_LARANJA 		Scalar( 42, 155, 242)
 #define COR_CINZA 			Scalar(128, 128, 128)
+
+#define TAMANHO_VETOR_JOGADORES 10

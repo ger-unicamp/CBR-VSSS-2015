@@ -255,11 +255,11 @@ void controlMotorR(int sense, int ref) {
   float uR = Kp*errR + Ki*intErrR;
   
   int uRi = uR;
-   Serial.println("Controle R");
+  /* Serial.println("Controle R");
    Serial.println(sense);
    Serial.println(errR);
    Serial.println(intErrR);
-   Serial.println(uRi);
+   Serial.println(uRi);*/
     
   setMotor(rightMotor, sense, uRi);
 

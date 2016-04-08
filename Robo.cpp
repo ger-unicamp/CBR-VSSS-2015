@@ -3,7 +3,7 @@
  */
 
 class Robo {
-	double posicao;
+	double getPosicao;
 
 	public:
 		double getPosicao();

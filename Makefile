@@ -43,10 +43,10 @@ RM = /usr/local/Cellar/cmake/3.0.2/bin/cmake -E remove -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /Users/wesleyide/workspace-eclipse-c/cbr-vsss/src
+CMAKE_SOURCE_DIR = /Users/wesleyide/workspace-sublime/CBR-VSSS-2015
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /Users/wesleyide/workspace-eclipse-c/cbr-vsss/src
+CMAKE_BINARY_DIR = /Users/wesleyide/workspace-sublime/CBR-VSSS-2015
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -73,9 +73,9 @@ rebuild_cache/fast: rebuild_cache
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/wesleyide/workspace-eclipse-c/cbr-vsss/src/CMakeFiles /Users/wesleyide/workspace-eclipse-c/cbr-vsss/src/CMakeFiles/progress.marks
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/wesleyide/workspace-sublime/CBR-VSSS-2015/CMakeFiles /Users/wesleyide/workspace-sublime/CBR-VSSS-2015/CMakeFiles/progress.marks
 	$(MAKE) -f CMakeFiles/Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/wesleyide/workspace-eclipse-c/cbr-vsss/src/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/wesleyide/workspace-sublime/CBR-VSSS-2015/CMakeFiles 0
 .PHONY : all
 
 # The main clean target

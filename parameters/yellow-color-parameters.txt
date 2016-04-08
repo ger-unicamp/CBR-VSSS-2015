@@ -1,9 +1,9 @@
-hL=0
-hH=180
-sL=0
-sH=250
-vL=0
-vH=255
+hL=56
+hH=62
+sL=38
+sH=76
+vL=38
+vH=76
 rL=0
 rH=255
 gL=0

@@ -1,4 +1,4 @@
-# Install script for directory: /Users/wesleyide/workspace-eclipse-c/cbr-vsss/src
+# Install script for directory: /Users/wesleyide/workspace-sublime/CBR-VSSS-2015
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -33,7 +33,7 @@ else()
   set(CMAKE_INSTALL_MANIFEST "install_manifest.txt")
 endif()
 
-file(WRITE "/Users/wesleyide/workspace-eclipse-c/cbr-vsss/src/${CMAKE_INSTALL_MANIFEST}" "")
+file(WRITE "/Users/wesleyide/workspace-sublime/CBR-VSSS-2015/${CMAKE_INSTALL_MANIFEST}" "")
 foreach(file ${CMAKE_INSTALL_MANIFEST_FILES})
-  file(APPEND "/Users/wesleyide/workspace-eclipse-c/cbr-vsss/src/${CMAKE_INSTALL_MANIFEST}" "${file}\n")
+  file(APPEND "/Users/wesleyide/workspace-sublime/CBR-VSSS-2015/${CMAKE_INSTALL_MANIFEST}" "${file}\n")
 endforeach()

@@ -64,6 +64,15 @@ int gYellowH = 0;
 int bYellowL = 0;
 int bYellowH = 0;
 
+// Parâmetros PURPLE
+int savePurpleParametersOfTrackbar = FALSE; // Save PURPLE parameters of trackbar
+int hPurpleL = 0;
+int hPurpleH = 0;
+int sPurpleL = 0;
+int sPurpleH = 0;
+int vPurpleL = 0;
+int vPurpleH = 0;
+
 // Parametros GREEN
 int saveGreenParametersOfTrackbar = FALSE; // Save GREEN parameters of trackbar
 int hGreenL = 0;
@@ -72,6 +81,38 @@ int sGreenL = 0;
 int sGreenH = 0;
 int vGreenL = 0;
 int vGreenH = 0;
+
+Point posJogador1[2];
+Point posJogador2[2];
+Point posJogador3[2];
+Point posBola;
+
+// Parâmetros jogadores geral
+int saveJogadoresParametersOfTrackbar = FALSE; // Save JOGADORES parameters of trackbar
+int areaJogadorL = 0;
+int areaJogadorH = 0;
+int areaId1L = 0;
+int areaId1H = 0;
+int areaId2L = 0;
+int areaId2H = 0;
+int areaId3L = 0;
+int areaId3H = 0;
+
+bool encontrouJogador1 = false;
+bool encontrouJogador2 = false;
+bool encontrouJogador3 = false;
+bool encontrouBola = false;
+
+int grauFrenteJogador1 = 0;
+int grauFrenteJogador2 = 0;
+int grauFrenteJogador3 = 0;
+// pontos apenas para verificar a inclinação do robô
+Point posJogador1Aux[2];
+Point posJogador2Aux[2];
+Point posJogador3Aux[2];
+
+bool openConnection = false;
+int fd;
 
 /**
  *     Função: initBallParameters
@@ -138,6 +179,47 @@ void initAreaParameters() {
 	    areaParametersFile.close();
 	} else {
 		cout << "[ERROR] Unable to open file AREA parameters." << endl; 
+	}
+}
+
+/**
+ *     Função: initJogadoresParameters
+ * Parâmetros: -
+ *    Retorno: -
+ *  Descrição: Inicializa os parâmetros dos jogadores baseado no arquivo "jogadores-parameters.txt".
+ *    Exemplo: -
+ **/
+void initJogadoresParameters() {
+	string line;
+	ifstream jogadoresParametersFile ("parameters/jogadores-parameters.txt");
+	if (jogadoresParametersFile.is_open()) {
+		while (getline(jogadoresParametersFile, line)) {
+		    vector<string> strSplit; 
+			strSplit = split(line, "="); 
+
+			if (strSplit[0] == "areaJogadorL") {
+				areaJogadorL = stoi(strSplit[1]);
+			} else if (strSplit[0] == "areaJogadorH") {
+				areaJogadorH = stoi(strSplit[1]);
+			} else if (strSplit[0] == "areaId1L") {
+				areaId1L = stoi(strSplit[1]);
+			} else if (strSplit[0] == "areaId1H") {
+				areaId1H = stoi(strSplit[1]);
+			} else if (strSplit[0] == "areaId2L") {
+				areaId2L = stoi(strSplit[1]);
+			} else if (strSplit[0] == "areaId2H") {
+				areaId2H = stoi(strSplit[1]);
+			} else if (strSplit[0] == "areaId3L") {
+				areaId3L = stoi(strSplit[1]);
+			} else if (strSplit[0] == "areaId3H") {
+				areaId3H = stoi(strSplit[1]);
+			} else {
+				cout << "[WARNING] Parameter " << strSplit[0] << ", from JOGADORES file, not found." << endl;
+			}
+	    }
+	    jogadoresParametersFile.close();
+	} else {
+		cout << "[ERROR] Unable to open file JOGADORES parameters." << endl; 
 	}
 }
 
@@ -247,6 +329,7 @@ void initYellowColorParameters() {
 void initParameters() {
 	initBallParameters();
 	initAreaParameters();
+	initJogadoresParameters();
 	initBlueColorParameters();
 	initYellowColorParameters();
 }

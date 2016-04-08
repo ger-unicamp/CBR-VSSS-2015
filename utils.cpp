@@ -51,14 +51,31 @@ vector<string> split(string str, string sep) {
  *    Exemplo: calculaPontoMedio([10,13], [1,2], [4,6])
  *             Saída: [5,7]
  **/
-Point calculaPontoMedio(vector<Point> pontos) {
-	Point pMedio;
-	pMedio.x = 0;
-	pMedio.y = 0;
+void calculaPontoMedio(vector<Point> pontos, Point *pMedio, int *diffX, int *diffY) {
+	int minX, minY;
+	int maxX, maxY;
+	minX = minY = 10000;
+	maxX = maxY = 0;
+	pMedio->x = 0;
+	pMedio->y = 0;
 	for (int i = 0; i < pontos.size(); i++) {
-		pMedio += pontos[i];
+		*pMedio += pontos[i];
+		if (pontos[i].x < minX)
+			minX = pontos[i].x;
+		if (pontos[i].x > maxX)
+			maxX = pontos[i].x;
+		if (pontos[i].y < minY)
+			minY = pontos[i].y;
+		if (pontos[i].y > maxY)
+			maxY = pontos[i].y;
 	}
-	pMedio.x = pMedio.x / pontos.size();
-	pMedio.y = pMedio.y / pontos.size();
-	return pMedio;
+	pMedio->x = pMedio->x / pontos.size();
+	pMedio->y = pMedio->y / pontos.size();
+	*diffX = maxX - minX;
+	*diffY = maxY - minY;
 }
+
+
+
+
+

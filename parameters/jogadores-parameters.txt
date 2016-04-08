@@ -1,0 +1,8 @@
+areaJogadorL=360
+areaJogadorH=583
+areaId1L=227
+areaId1H=300
+areaId2L=349
+areaId2H=438
+areaId3L=622
+areaId3H=790

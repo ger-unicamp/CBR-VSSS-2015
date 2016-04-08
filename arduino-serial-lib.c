@@ -25,12 +25,12 @@ int serialport_init(const char* serialport, int baud)
 {
     struct termios toptions;
     int fd;
-    printf("serialport: %s\n", serialport);
+    
     //fd = open(serialport, O_RDWR | O_NOCTTY | O_NDELAY);
     fd = open(serialport, O_RDWR | O_NONBLOCK );
     
     if (fd == -1)  {
-        perror("serialport_init: Unable to open port\n");
+        perror("serialport_init: Unable to open port ");
         return -1;
     }
     
@@ -128,6 +128,7 @@ int serialport_read_until(int fd, char* buf, char until, int buf_max, int timeou
         if( n==0 ) {
             usleep( 1 * 1000 );  // wait 1 msec try again
             timeout--;
+            if( timeout==0 ) return -2;
             continue;
         }
 #ifdef SERIALPORTDEBUG  

@@ -6,10 +6,12 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <cstring>
 
 // Bibliotecas C
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 // Bibliotecas Externas
 // OpenCV
@@ -19,14 +21,13 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/video.hpp>
 #include <opencv2/videoio.hpp>
-// Arduino Serial
-#include "arduino-serial-lib.c"
 
 // Funções
 #include "constantes.cpp"
 #include "utils.hpp"
 #include "inits.hpp"
 #include "campo.hpp"
+#include "estrategia.h"
 
 // Classes
 
@@ -35,25 +36,23 @@ using namespace cv;
 using namespace std;
 
 void createTrackbarsGlobal();
-
-//const int alpha_slider_max = 100;
-//int alpha_slider;
-//double alpha;
-//double beta;
-
-void on_trackbar(int, void*)
-{
-//	alpha = (double) alpha_slider/alpha_slider_max ;
-//	beta = ( 1.0 - alpha );
-//
-//	addWeighted( imgOriginal, alpha, imgThresholded, beta, 0.0, imgThresholded);
-//
-//	imshow( "Control", imgThresholded );
-}
+void saveTrackbarsParameters();
+void defineJogadores(Point posJogadores[]);
+void defineFrenteJogador(int jogador);
+void sendCommands(int robot, int directionRight, int speedRight, int directionLeft, int speedLeft);
+void jogaBonito();
+void jogaLouco();
 
 int main( int argc, char* argv[] )
 {
+	bool modoJogo = false;
+	bool inverteCampo = false;
+
+	// Variáveis para quando for o jogo
+	int disableTrackbars = FALSE;
+
 	cout << "Init video: Init" << endl;
+
 	VideoCapture cap(0); //capture the video from webcam
 
 	if ( !cap.isOpened() ) {  // if not success, exit program
@@ -62,30 +61,32 @@ int main( int argc, char* argv[] )
 	}
 	cout << "Init video: End" << endl;
 
-    char serialPort[] = "/dev/tty.usbmodem1421";
-
-	// Variáveis para quando for o jogo
-	int disableTrackbars = TRUE;
-
 	// Variáveis relativas ao campo;
 	int statusCampo = CAMPO_NAO_ENCONTRADO;
-	int achouCampo;
+	int achouCampoOpcao1, achouCampoOpcao2;
 	Point superiorEsq, inferiorEsq, superiorDir, inferiorDir;
 
 	int contrast = -200;
 
+	Point posJogadores[TAMANHO_VETOR_JOGADORES];
+	int countJogadores = 0;
+
 	// HSV Components
-	int iLowH = 3;
+	int iLowH = 0;
 	int iHighH = 180;
 
-	int iLowS = 2;
-	int iHighS = 245;
+	int iLowS = 0;
+	int iHighS = 255;
 
-	int iLowV = 5;
-	int iHighV = 240;
+	int iLowV = 200;
+	int iHighV = 255;
 
 	int kernelSize = 2;
-	int kernelMorphological = 1;
+	// Para identificar o Campo com o método 1, tem que começar esse parâmetro com zero.
+	// Com o método 2, tem que começar com 3. O método 1 tem um problema, que é quando tem algum
+	// jogador sobre alguma linha das grandes áreas. O método 2 é melhor por ser menos sensível
+	// a outros fatores (pelo menos vistos até agora).
+	int kernelMorphological = 0;
 
 	// Canny
 	int epsilon = 5;
@@ -94,78 +95,81 @@ int main( int argc, char* argv[] )
 	int apertureSize = 2;
 	int L2gradient = TRUE;
 
-	int areaPlayerL = 350;
-	int areaPlayerH = 1300;
+	int countPrints = 2;
 
-	int vPlayerL = 3;
-	int vPlayerH = 9;
-
-	int vPlayerIdL = 1;
-	int vPlayerIdH = 2;
+	int alpha = 100;
+	int beta = 0;
 
 	initParameters();
 
-  	if (!disableTrackbars) {
+	// int aux = 0;
+
+  	if (!disableTrackbars && !modoJogo) {
   		createTrackbarsGlobal();
 
   		// Trackbars com variáveis locais
 
-		createTrackbar("LowH", "Control", &iLowH, 180, on_trackbar); //Hue (0 - 180)
-		createTrackbar("HighH", "Control", &iHighH, 180, on_trackbar);
+  		namedWindow("Control", WINDOW_NORMAL);
+		// createTrackbar("LowH", "Control", &iLowH, 180, on_trackbar); //Hue (0 - 180)
+		// createTrackbar("HighH", "Control", &iHighH, 180, on_trackbar);
 
-		createTrackbar("LowS", "Control", &iLowS, 255, on_trackbar); //Saturation (0 - 255)
-		createTrackbar("HighS", "Control", &iHighS, 255, on_trackbar);
+		// createTrackbar("LowS", "Control", &iLowS, 255, on_trackbar); //Saturation (0 - 255)
+		// createTrackbar("HighS", "Control", &iHighS, 255, on_trackbar);
 
-		createTrackbar("LowV", "Control", &iLowV, 255, on_trackbar);//Value (0 - 255)
-		createTrackbar("HighV", "Control", &iHighV, 255, on_trackbar);
+		// createTrackbar("LowV", "Control", &iLowV, 255, on_trackbar);//Value (0 - 255)
+		// createTrackbar("HighV", "Control", &iHighV, 255, on_trackbar);
 
   		// TODO: Tornar as variáveis de funções de tratamento de imagem em variáveis globais, para fazer esquema de salvar em arquivo.
 
 		// createTrackbar("contrast", "Control", &contrast, 200);
 		// createTrackbar("ksize", "Control", &kernelSize, 20);
-		// createTrackbar("kmorp", "Control", &kernelMorphological, 20);
+		createTrackbar("kmorp", "Control", &kernelMorphological, 20);
 		// createTrackbar("epsilon", "Control", &epsilon, 20);
 		// createTrackbar("threshold", "Control", &threshold, 200);
 		// createTrackbar("thresholdProp", "Control", &thresholdProp, 1);
 		// createTrackbar("apertureSize", "Control", &apertureSize, 5);
 		// createTrackbar("L2gradient", "Control", &L2gradient, 1);
+
+
+		createTrackbar("alpha", "Control", &alpha, 100);
+		createTrackbar("beta", "Control", &beta, 100);
 	}
 
 	while (true)
 	{
+		// cout << aux++ << endl;
 		int campoEsquerdo = -1;
 		int campoDireito = -1;
+		int limiteSuperior = -1;
+		int limiteInferior = -1;
 		int swapCampo;
-		vector<vector<Point> > contours;
-		vector<vector<Point> > contoursOut;
+		vector<vector<Point> > contours, contoursBall, contoursOut, contoursBallOut;
 		vector<Vec4i> hierarchy;
-		// RNG rng(12345);
 
-		Mat imgOriginal, // Imagem Original - Nunca é alterada!
-			imgAnalise, // Imagem utilizada para ver os resultados de identificação na imagem original.
-			imgTransformada, // Imagem transformada do campo, após este ser localizado
-			imgYCrCb,
-			imgXYZ,
-			imgHLS,
-			imgLab,
-			imgLuv,
+		Mat imgOriginal, imgOriginalMenor, // Imagem Original - Nunca é alterada!
+			imgAnalise, imgAnaliseMenor, // Imagem utilizada para ver os resultados de identificação na imagem original.
+			// imgTransformada, // Imagem transformada do campo, após este ser localizado
 			imgHSV, // Imagem com as componentes HSV
-			imgThresholded, // Imagem a qual são aplicados filtros para encontrar os polígonos na imagem
-			imgContrastRGB,
-			imgContrastHSV,
-			imgPlayersRGB = Mat::zeros(imgThresholded.size(), CV_8UC3), // Imagem (RGB) apenas dos jogadores
-			mask_image = Mat::zeros(imgThresholded.size(), CV_8UC3), // Imagem de máscara para filtrar os jogadores
-			imgPlayersHSV = Mat::zeros(imgThresholded.size(), CV_8UC3); // Imagem (HSV) apenas dos jogadores
+			imgHSVHist,
+			imgHSVMod,
+			// imgHLS, imgHLSMenor,
+			imgThresholded, imgThresholdedMenor, // Imagem a qual são aplicados filtros para encontrar os polígonos na imagem
+			// imgContrastRGB,
+			// imgContrastHSV,
+			imgBola, imgBolaMenor,
+			imgTeste,
+			// imgAzul, imgAzulMenor,
+			// imgAmarelo, imgAmareloMenor,
+			// imgRoxo, imgRoxoMenor,
+			// imgPlayersRGB = Mat::zeros(imgThresholded.size(), CV_8UC3), // Imagem (RGB) apenas dos jogadores
+			mask_image = Mat::zeros(imgThresholded.size(), CV_8UC3); // Imagem de máscara para filtrar os jogadores
+			// imgPlayersHSV = Mat::zeros(imgThresholded.size(), CV_8UC3); // Imagem (HSV) apenas dos jogadores
 
-		vector<Mat> channelsYCrCb(3),
-					channelsXYZ(3),
-					channelsHLS(3),
-					channelsLab(3),
-					channelsLuv(3),
-					channelsHSV(3);
+		achouCampoOpcao1 = achouCampoOpcao2 = FALSE;
 
-		achouCampo = FALSE;
-
+		
+		cap.set(CAP_PROP_BRIGHTNESS, 0.2);
+		cap.set(CAP_PROP_CONTRAST, 10);
 		bool bSuccess = cap.read(imgOriginal); // read a new frame from video
 
 		if (!bSuccess) { //if not success, break loop
@@ -173,7 +177,35 @@ int main( int argc, char* argv[] )
 			break;
 		}
 
-		// imgAnalise = imgOriginal;
+		// imgOriginal = imread("prints/tela07mod.png");
+
+		countJogadores = 0;
+		for (int i = 0; i < TAMANHO_VETOR_JOGADORES; i++) {
+			posJogadores[i] = Point(0, 0);
+		}
+
+		// Point2f srcTri[3];
+		// Point2f dstTri[3];
+		// srcTri[0] = Point2f( 0,0 );
+		// srcTri[1] = Point2f( imgOriginal.cols - 1, 0 );
+		// srcTri[2] = Point2f( 0, imgOriginal.rows - 1 );
+
+		// dstTri[0] = Point2f( imgOriginal.cols*0.0, imgOriginal.rows*0.33 );
+		// dstTri[1] = Point2f( imgOriginal.cols*0.85, imgOriginal.rows*0.25 );
+		// dstTri[2] = Point2f( imgOriginal.cols*0.15, imgOriginal.rows*0.7 );
+
+		// Mat warp_mat( 2, 3, CV_32FC1 );
+		// warpAffine(imgOriginal, imgOriginal, warp_mat, imgOriginal.size() );
+		// warp_mat = getAffineTransform( srcTri, dstTri );
+		if (inverteCampo) {
+			flip(imgOriginal, imgOriginal, 1);
+		}
+		imgOriginal.copyTo(imgAnalise, mask_image);
+
+		imgTeste = Mat::zeros( imgOriginal.size(), imgOriginal.type() );
+		imgTeste = imgOriginal + Scalar(-75, -75, -75);
+		// imgOriginal.convertTo(imgTeste, -1, alpha / 100, - beta);
+
 
 /**
 	Mat::convertTo
@@ -186,90 +218,70 @@ int main( int argc, char* argv[] )
 	alpha – optional scale factor.
 	beta – optional delta added to the scaled values.
 **/
-
-		// imgOriginal.convertTo(imgContrastRGB, -1, 1, contrast);
+		// imgAnalise.convertTo(imgContrastRGB, -1, 1, contrast);
 		// cvtColor(imgContrastRGB, imgContrastHSV, COLOR_BGR2HSV);
 
-		/** Tipos de Luzes
-		 *	Luz acromática - seu único atributo é a intensidade (ou a quantidade);
-		 *	Luz cromática  - engloba o espectro de energia eletromagnética visível.
-		 */
+		/*
+		cvtColor(imgAnalise, imgGray, COLOR_BGR2GRAY);
+		GaussianBlur(imgGray, imgGray, Size(9, 9), 2, 2);
+		vector<Vec3f> circles;
+    	HoughCircles(imgGray, circles, HOUGH_GRADIENT, 1, 20, 200, 1, 1, 100);
+    	// cout << "circles.size(): " << circles.size() << endl;
+    	for (size_t i = 0; i < circles.size(); i++) {
+	         Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
+	         int radius = cvRound(circles[i][2]);
+	         // draw the circle center
+	         circle(imgGray, center, 3, Scalar(0,255,0), -1, 8, 0);
+	         // draw the circle outline
+	         circle(imgGray, center, radius, Scalar(0,0,255), 3, 8, 0);
+	    }
+	    */
 
-		/** YCrCb
-		 * 	Modelo de representação da cor dedicado ao vídeo analógico.
-		 *	O parâmero Y representa a luminância (ou seja a informação a preto e branco),
-		 *	enquanto U e V permitem representar a corminância, ou seja, a informação sobre a cor.
-		 */
-		cvtColor(imgOriginal, imgYCrCb, COLOR_BGR2YCrCb);
-
-		/** XYZ
-		 *	O Y representa o valor de luminância (brilho), Z como próximo ao estímulo azul e X uma
-		 * 	mistura (combinação linear) de estímulos escolhida para ser não negativo.
-		 */
-		cvtColor(imgOriginal, imgXYZ, COLOR_BGR2XYZ);
-
-		/** HLS
-		 *	Hue (matiz) - Define o componente de cor;
-		 *	Lightness (brilho)
-		 *	Saturation (saturação) - define o quão "pura" é a cor, ou se ela está misturada com
-		 *		outras cores (complementar), tornando-se mais pálida.
-		 */
-		cvtColor(imgOriginal, imgHLS, COLOR_BGR2HLS);
-
-		/** Lab e Luv
-		 *	L = 0, produz preto; L = 100, branco difuso;
-		 *	a < 0 indica cor próxima ao verde e a > 0 cor próxima ao magenta;
-		 *	b < 0 indica cor próxima ao azul e b > 0 cor próxima ao amarelo.
-		 */
-		cvtColor(imgOriginal, imgLab, COLOR_BGR2Lab);
-		cvtColor(imgOriginal, imgLuv, COLOR_BGR2Luv);
-
-		/** HSV
-		 *	Hue (matiz) - Define o componente de cor;
-		 *	Saturation (saturação) - define o quão "pura" é a cor, ou se ela está misturada com
-		 *		outras cores (complementar), tornando-se mais pálida.
-		 *	Value (valor/brilho) - define a quantidade de luz na mistura, quanto mais luz mais
-		 *		clara a cor (na ausência de valor, a imagem é toda preta)
-		 */
-		cvtColor(imgOriginal, imgHSV, COLOR_BGR2HSV); //Convert the captured frame from BGR to HSV
-
-		resize(imgOriginal, imgOriginal, Size(0,0), 0.3, 0.3, INTER_LINEAR);
-		resize(imgYCrCb, imgYCrCb, Size(0,0), 0.3, 0.3, INTER_LINEAR);
-		resize(imgXYZ, imgXYZ, Size(0,0), 0.3, 0.3, INTER_LINEAR);
-		resize(imgHLS, imgHLS, Size(0,0), 0.3, 0.3, INTER_LINEAR);
-		resize(imgLab, imgLab, Size(0,0), 0.3, 0.3, INTER_LINEAR);
-		resize(imgLuv, imgLuv, Size(0,0), 0.3, 0.3, INTER_LINEAR);
-		resize(imgHSV, imgHSV, Size(0,0), 0.3, 0.3, INTER_LINEAR);
-
-		split(imgYCrCb, channelsYCrCb);
-		split(imgXYZ, channelsXYZ);
-		split(imgHLS, channelsHLS);
-		split(imgLab, channelsLab);
-		split(imgLuv, channelsLuv);
+		cvtColor(imgAnalise, imgHSV, COLOR_BGR2HSV); //Convert the captured frame from BGR to HSV
+		vector<Mat> channelsHSV;
 		split(imgHSV, channelsHSV);
+		// add(channelsHSV[0], Scalar(50), channelsHSV[0]);
+		add(channelsHSV[1], Scalar(50), channelsHSV[1]);
+		add(channelsHSV[2], Scalar(-50), channelsHSV[2]);
+		merge(channelsHSV, imgHSVMod);
+		// cvtColor(imgHSVMod, imgHSVMod, COLOR_HSV2BGR);
 
-/*********
-		vector<Mat> channels; 
-       	Mat imgHistEqualized;
-
-       	cvtColor(imgOriginal, imgHistEqualized, COLOR_BGR2YCrCb); //change the color image from BGR to YCrCb format
+		/*** TESTE COM IMAGEM EQUALIZADA A PARTIR DE HISTOGRAMA ***/
+		vector<Mat> channels;
+       	Mat imgHistEqualized, imgHistEqualizedMenor;
+       	cvtColor(imgAnalise, imgHistEqualized, COLOR_BGR2YCrCb); //change the color image from BGR to YCrCb format
        	split(imgHistEqualized, channels); //split the image into channels
        	equalizeHist(channels[0], channels[0]); //equalize histogram on the 1st channel (Y)
    		merge(channels, imgHistEqualized); //merge 3 channels including the modified 1st channel into one image
       	cvtColor(imgHistEqualized, imgHistEqualized, COLOR_YCrCb2BGR); //change the color image from YCrCb to BGR format (to display image properly)
+      	cvtColor(imgHistEqualized, imgHSVHist, COLOR_BGR2HSV);
+      	imgHSV = imgHSVMod;
+/**
+	inRange: Checks if array elements lie between the elements of two other arrays.
 
-       	// namedWindow("Histogram Equalized", CV_WINDOW_AUTOSIZE);
-       	// imshow("Histogram Equalized", imgHistEqualized);
+	C++: void inRange(InputArray src, InputArray lowerb, InputArray upperb, OutputArray dst)
+	Parameters:	
+	src – first input array.
+	lowerb – inclusive lower boundary array or a scalar.
+	upperb – inclusive upper boundary array or a scalar.
+	dst – output array of the same size as src and CV_8U type.
+**/
+
+		// inRange(imgHSV, Scalar(15, 100, 100), Scalar(45, 255, 255), imgLaranja);
+		inRange(imgHSV, Scalar(hBallL, sBallL, vBallL), Scalar(hBallH, sBallH, vBallH), imgBola);
+		// inRange(imgHSV, Scalar(hBlueL, sBlueL, vBlueL), Scalar(hBlueH, sBlueH, vBlueH), imgAzul);
+		// inRange(imgHSV, Scalar(hYellowL, sYellowL, vYellowL), Scalar(hYellowH, sYellowH, vYellowH), imgAmarelo);
+		// inRange(imgHSV, Scalar(hPurpleL, sPurpleL, vPurpleL), Scalar(hPurpleH, sPurpleH, vPurpleH), imgRoxo);
 
 		inRange(imgHSV, Scalar(iLowH, iLowS, iLowV), Scalar(iHighH, iHighS, iHighV), imgThresholded); //Threshold the image
 
 		//morphological opening (removes small objects from the foreground)
-		erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(2*kernelMorphological+1, 2*kernelMorphological+1)) );
-		dilate(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(2*kernelMorphological+1, 2*kernelMorphological+1)) );
+		erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(2 * kernelMorphological + 1, 2 * kernelMorphological + 1)) );
+		dilate(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(2 * kernelMorphological + 1, 2 * kernelMorphological + 1)) );
 
 		//morphological closing (removes small holes from the foreground)
-		dilate(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(2*kernelMorphological+1, 2*kernelMorphological+1)) );
-		erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(2*kernelMorphological+1, 2*kernelMorphological+1)) );
+		dilate(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(2 * kernelMorphological + 1, 2 * kernelMorphological + 1)) );
+		erode(imgThresholded, imgThresholded, getStructuringElement(MORPH_ELLIPSE, Size(2 * kernelMorphological + 1, 2 * kernelMorphological + 1)) );
 
 		//Calculate the moments of the thresholded image
 //		Moments oMoments = moments(imgThresholded);
@@ -295,23 +307,25 @@ int main( int argc, char* argv[] )
 //			iLastY = posY;
 //		}
 
-		blur(imgOriginal, imgOriginal, Size(2*kernelSize+1, 2*kernelSize+1));
+		blur(imgAnalise, imgAnalise, Size(2*kernelSize+1, 2*kernelSize+1));
 		blur(imgThresholded, imgThresholded, Size(2*kernelSize+1, 2*kernelSize+1));
 
 		/// Detect edges using canny
-		Canny(imgThresholded, imgThresholded, threshold, threshold * (2 + thresholdProp), 2*apertureSize+1, L2gradient);
+		Canny(imgThresholded, imgThresholded, threshold, threshold * (2 + thresholdProp), 2 * apertureSize + 1, L2gradient);
 
 		/// Find contours
 		findContours(imgThresholded, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
 
 		contoursOut.resize(contours.size());
-	    for( size_t k = 0; k < contours.size(); k++ ) {
+	    for (size_t k = 0; k < contours.size(); k++ ) {
 	        approxPolyDP(Mat(contours[k]), contoursOut[k], epsilon, true);
-	        Scalar color = COR_VERMELHO;
+	        Scalar color = COR_CINZA;
 
         	int area = fabs(contourArea(contours[k], 0));
 	
-    		Point pMedio = calculaPontoMedio(contoursOut[k]);
+    		Point pMedio;
+    		int diffX, diffY;
+    		calculaPontoMedio(contoursOut[k], &pMedio, &diffX, &diffY);
 
 			if (statusCampo == CAMPO_NAO_ENCONTRADO ||
 				(statusCampo == CAMPO_ENCONTRADO &&
@@ -319,52 +333,93 @@ int main( int argc, char* argv[] )
 				  pMedio.x <= superiorDir.x + MARGEM_DE_ERRO_CAMPO && pMedio.x <= inferiorDir.x + MARGEM_DE_ERRO_CAMPO &&
 				  pMedio.y >= superiorEsq.y - MARGEM_DE_ERRO_CAMPO && pMedio.y >= superiorDir.y - MARGEM_DE_ERRO_CAMPO && 
 			   	  pMedio.y <= inferiorEsq.y + MARGEM_DE_ERRO_CAMPO && pMedio.y <= inferiorDir.y + MARGEM_DE_ERRO_CAMPO))) {
+				// int r = imgContrastRGB.at<Vec3b>(pMedio.x, pMedio.y)[0];
+				// int g = imgContrastRGB.at<Vec3b>(pMedio.x, pMedio.y)[1];
+				// int b = imgContrastRGB.at<Vec3b>(pMedio.x, pMedio.y)[2];
 
-				int r = imgContrastRGB.at<Vec3b>(pMedio.x, pMedio.y)[0];
-				int g = imgContrastRGB.at<Vec3b>(pMedio.x, pMedio.y)[1];
-				int b = imgContrastRGB.at<Vec3b>(pMedio.x, pMedio.y)[2];
+				// int h = imgHSV.at<Vec3b>(pMedio.x, pMedio.y)[0];
+				// int s = imgHSV.at<Vec3b>(pMedio.x, pMedio.y)[1];
+				// int v = imgHSV.at<Vec3b>(pMedio.x, pMedio.y)[2];
 
-				int h = imgHSV.at<Vec3b>(pMedio.x, pMedio.y)[0];
-				int s = imgHSV.at<Vec3b>(pMedio.x, pMedio.y)[1];
-				int v = imgHSV.at<Vec3b>(pMedio.x, pMedio.y)[2];
-
-		      	if ((area >= areaBallL && area <= areaBallH) && 
-		      		(h >= hBallL && h <= hBallH && s >= sBallL && s <= sBallH)) { // BOLA
-	        		color = COR_LARANJA;
-	        	} else if (statusCampo == CAMPO_NAO_ENCONTRADO && area >= areaAreaL && area <= areaAreaH) { // ÁREA DO CAMPO				
-					if (contoursOut[k].size() == 4){
-						if (campoEsquerdo == -1 && contoursOut[k][0].x < 640) {
+		      	if (statusCampo == CAMPO_NAO_ENCONTRADO) { // ÁREA DO CAMPO
+					if (area >= areaAreaL && area <= areaAreaH && contoursOut[k].size() == 4) { // Método 1: Determinando pela grande área.
+						if (campoEsquerdo == -1 && pMedio.x < 640) {
 							campoEsquerdo = k;
-							achouCampo++;
-						} else if (campoDireito == -1 && contoursOut[k][0].x >= 640) {
+							achouCampoOpcao1++;
+						} else if (campoDireito == -1 && pMedio.x >= 640) {
 							campoDireito = k;
-							achouCampo++;
+							achouCampoOpcao1++;
 						} else {
 							color = COR_VERDE_ESCURO;
 						}
-					} 
-				} else if (area >= areaPlayerL && area <= areaPlayerH) { // JOGADOR
-	        	// } else if (contoursOut[k].size() >= vPlayerL && contoursOut[k].size() <= vPlayerH) { // JOGADOR
-		        // 		   (contoursOut[k].size() >= vPlayerIdL && contoursOut[k].size() <= vPlayerIdH)) {
+					} else if (diffX > 700) { // Método 2: Determinado pelos limites superior e inferior.
+						if (limiteSuperior == -1 && pMedio.y < 360) {
+							limiteSuperior = k;
+							achouCampoOpcao2++;
+						} else if (limiteInferior == -1 && pMedio.y >= 360) {
+							limiteInferior = k;
+							achouCampoOpcao2++;
+						} else {
+							color = COR_VERDE_ESCURO;
+						}
+					}
+				} else if (diffX <= 300 && diffY <= 300 /*&& area >= 400 && area <= 700*/) { // JOGADOR
+				// } else if (area >= areaJogadorL && area <= areaJogadorH) { // JOGADOR
+					// drawContours(mask_image, contours, k, color, FILLED);
+					// imgOriginal.copyTo(imgPlayersRGB, mask_image);
 
-					// if (h >= hBlueL && h <= hBlueH && s >= sBlueL && s <= sBlueH && v >= vBlueL && v <= vBlueH) {
-					if (r >= rBlueL && r <= rBlueH && g >= gBlueL && g <= gBlueH && b >= bBlueL && b <= bBlueH) {
+				 	// Convert BGR to HSV
+				    // cvtColor(imgPlayersRGB, imgPlayersHSV, COLOR_BGR2HSV);
+
+					if (area >= areaId1L && area <= areaId1H) {
 						color = COR_AZUL;
-					} else if (h >= hYellowL && h <= hYellowH && s >= sYellowL && s <= sYellowH && v >= vYellowL && v <= vYellowH) {
+						posJogador1[0] = pMedio;
+					} else if (area > areaId2L && area <= areaId2H) {
 						color = COR_AMARELO;
-					} else if (h >= hGreenL && h <= hGreenH && s >= sGreenL && s <= sGreenH && v >= vGreenL && v <= vGreenH) {
+						posJogador2[0] = pMedio;
+					} else if (area >= areaJogadorL && area <= areaJogadorH) {
 						color = COR_VERMELHO;
+						if (statusCampo == CAMPO_ENCONTRADO && countJogadores < TAMANHO_VETOR_JOGADORES) {
+							bool altera = true;
+							for (int i = 0; i < TAMANHO_VETOR_JOGADORES; i++) {
+								if (posJogadores[i].x != 0 && posJogadores[i].y != 0) {
+									int diffX = abs(pMedio.x - posJogadores[i].x);
+									int diffY = abs(pMedio.y - posJogadores[i].y);
+									if (diffX < 30 && diffY < 30)
+										altera = false;
+								}
+							}
+							if (altera) {
+								posJogadores[countJogadores++] = pMedio;
+							}
+						}
+					} else if (area >= areaId3L && area <= areaId3H) {
+						color = COR_VERDE_ESCURO;
+						posJogador3[0] = pMedio;
 					} else {
 						color = COR_CINZA;
 					}
 
-					drawContours(mask_image, contours, k, color, FILLED);
-					imgOriginal.copyTo(imgPlayersRGB, mask_image);
+					if (!modoJogo)
+			    		drawContours(imgAnalise, contours, k, color, FILLED);
+			    	// cout << area << endl;
 
-				 	// Convert BGR to HSV
-				    cvtColor(imgPlayersRGB, imgPlayersHSV, COLOR_BGR2HSV);
+					// if (statusCampo == CAMPO_ENCONTRADO) {
+					// 	int r = imgOriginal.at<Vec3b>(pMedio.x, pMedio.y)[0];
+					// 	int g = imgOriginal.at<Vec3b>(pMedio.x, pMedio.y)[1];
+					// 	int b = imgOriginal.at<Vec3b>(pMedio.x, pMedio.y)[2];
+					// 	printf("(%d, %d) - RGB (%d, %d, %d)\n", pMedio.x, pMedio.y, r, g, b);
 
-			    	drawContours(imgOriginal, contours, k, color, FILLED);
+					// 	int h = imgHSV.at<Vec3b>(pMedio.x, pMedio.y)[0];
+					// 	int s = imgHSV.at<Vec3b>(pMedio.x, pMedio.y)[1];
+					// 	int v = imgHSV.at<Vec3b>(pMedio.x, pMedio.y)[2];
+					// 	printf("(%d, %d) - HSV (%d, %d, %d)\n", pMedio.x, pMedio.y, h, s, v);
+
+					// 	int y = imgHistEqualized.at<Vec3b>(pMedio.x, pMedio.y)[0];
+					// 	int cr = imgHistEqualized.at<Vec3b>(pMedio.x, pMedio.y)[1];
+					// 	int cb = imgHistEqualized.at<Vec3b>(pMedio.x, pMedio.y)[2];
+					// 	printf("(%d, %d) - YCrCb (%d, %d, %d)\n", pMedio.x, pMedio.y, y, cr, cb);
+					// }
 
 				    // Threshold the HSV image to get only blue colors
 				    // inRange(imgPlayersHSV, lower_blue, upper_blue, mask_image);
@@ -407,36 +462,127 @@ int main( int argc, char* argv[] )
 		        } else {
 		        	color = COR_CINZA;
 		        }
-		        drawContours( imgOriginal, contours, k, color, 2, 8, hierarchy, 0, Point() );
+
+		        if (!modoJogo)
+		        	drawContours(imgAnalise, contours, k, color, 2, 8, hierarchy, 0, Point());
 		    }
 		}
 
-		if (achouCampo == 2 && statusCampo == CAMPO_NAO_ENCONTRADO) {
-			if (contoursOut[campoDireito][0].x < contoursOut[campoEsquerdo][0].x) {
-				swapCampo = campoEsquerdo;
-				campoEsquerdo = campoDireito;
-				campoDireito = swapCampo;
+		if ((achouCampoOpcao1 == 2 || achouCampoOpcao2 == 2) && statusCampo == CAMPO_NAO_ENCONTRADO) {
+			if (achouCampoOpcao1 == 2) {
+				if (contoursOut[campoDireito][0].x < contoursOut[campoEsquerdo][0].x) {
+					swapCampo = campoEsquerdo;
+					campoEsquerdo = campoDireito;
+					campoDireito = swapCampo;
+				}
+
+				Point aEsq, bEsq, cEsq, dEsq, aDir, bDir, cDir, dDir;
+
+				defineABCD(contoursOut[campoEsquerdo], &aEsq, &bEsq, &cEsq, &dEsq); // Seta os pontos A, B, C e D do campo esquerdo.
+				defineABCD(contoursOut[campoDireito], &aDir, &bDir, &cDir, &dDir);  // Seta os pontos A, B, C e D do campo direito.	
+				defineCantos(aEsq, cEsq, bDir, dDir, &superiorEsq, &inferiorEsq, &superiorDir, &inferiorDir);
+			} else if (achouCampoOpcao2 == 2) {
+				Point pMedioSuperior, pMedioInferior;
+				int diffXSuperior, diffYSuperior, diffXInferior, diffYInferior;
+				calculaPontoMedio(contoursOut[limiteSuperior], &pMedioSuperior, &diffXSuperior, &diffYSuperior);
+				calculaPontoMedio(contoursOut[limiteInferior], &pMedioInferior, &diffXInferior, &diffYInferior);
+
+				superiorEsq = Point(pMedioSuperior.x - (diffXSuperior / 2), pMedioSuperior.y - (diffYSuperior / 4));
+				inferiorEsq = Point(pMedioInferior.x - (diffXInferior / 2), pMedioInferior.y + (diffYInferior / 4));
+				superiorDir = Point(pMedioSuperior.x + (diffXSuperior / 2), pMedioSuperior.y - (diffYSuperior / 4));
+				inferiorDir = Point(pMedioInferior.x + (diffXInferior / 2), pMedioInferior.y + (diffYInferior / 4));
+
+				superiorEsq.x = fmin(superiorEsq.x, inferiorEsq.x);
+				inferiorEsq.x = fmin(superiorEsq.x, inferiorEsq.x);
+				superiorDir.x = fmax(superiorDir.x, inferiorDir.x);
+				inferiorDir.x = fmax(superiorDir.x, inferiorDir.x);
+
+				superiorEsq.y = fmin(superiorEsq.y, superiorDir.y);
+				superiorDir.y = fmin(superiorEsq.y, superiorDir.y);
+				inferiorEsq.y = fmax(inferiorEsq.y, inferiorDir.y);
+				inferiorDir.y = fmax(inferiorEsq.y, inferiorDir.y);
+				// superiorEsq.x = superiorEsq.x - (superiorEsq.x * 0.2);
+				// inferiorEsq.x = inferiorEsq.x - (inferiorEsq.x * 0.2);
+				// superiorDir.x = superiorDir.x * 1.2;
+				// inferiorDir.x = inferiorDir.x * 1.2;
 			}
-
-			Point aEsq, bEsq, cEsq, dEsq, aDir, bDir, cDir, dDir;
-
-			defineABCD(contoursOut[campoEsquerdo], &aEsq, &bEsq, &cEsq, &dEsq); // Seta os pontos A, B, C e D do campo esquerdo.
-			defineABCD(contoursOut[campoDireito], &aDir, &bDir, &cDir, &dDir);  // Seta os pontos A, B, C e D do campo direito.	
-			defineCantos(aEsq, cEsq, bDir, dDir, &superiorEsq, &inferiorEsq, &superiorDir, &inferiorDir);
-			imgTransformada = transformaCampo(superiorEsq, inferiorEsq, superiorDir, inferiorDir, imgOriginal);
+			// imgTransformada = transformaCampo(superiorEsq, inferiorEsq, superiorDir, inferiorDir, imgOriginal);
 			statusCampo = CAMPO_ENCONTRADO;
+			kernelMorphological = 4;
 		}
 
 		if (statusCampo == CAMPO_ENCONTRADO) {
-			vector<Point> pts;
-			pts.push_back(superiorEsq);
-			pts.push_back(inferiorEsq);
-			pts.push_back(inferiorDir);
-			pts.push_back(superiorDir);
-			polylines(imgOriginal, pts, 1, COR_VERDE, 2, 8, 0);
+			if (!modoJogo) {
+				vector<Point> pts;
+				pts.push_back(superiorEsq);
+				pts.push_back(inferiorEsq);
+				pts.push_back(inferiorDir);
+				pts.push_back(superiorDir);
+				polylines(imgAnalise, pts, 1, COR_VERDE, 2, 8, 0);
+			}
 
-		    // namedWindow("imgTransformada", WINDOW_AUTOSIZE);
-		    // imshow("imgTransformada", imgTransformada); //show the thresholded image
+			// Procurar a Bola
+			blur(imgBola, imgBola, Size(2*kernelSize+1, 2*kernelSize+1));
+			Canny(imgBola, imgBola, threshold, threshold * (2 + thresholdProp), 2 * apertureSize + 1, L2gradient);
+			findContours(imgBola, contoursBall, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
+
+			contoursBallOut.resize(contoursBall.size());
+			for (size_t k = 0; k < contoursBall.size(); k++ ) {
+				approxPolyDP(Mat(contoursBall[k]), contoursBallOut[k], epsilon, true);
+				int area = fabs(contourArea(contoursBall[k], 0));
+				Point pMedio;
+				int diffX, diffY;
+				calculaPontoMedio(contoursBallOut[k], &pMedio, &diffX, &diffY);
+				if (/*area >= areaBallL && area <= areaBallH &&*/
+					pMedio.x >= superiorEsq.x - MARGEM_DE_ERRO_CAMPO && pMedio.x >= inferiorEsq.x - MARGEM_DE_ERRO_CAMPO && 
+					pMedio.x <= superiorDir.x + MARGEM_DE_ERRO_CAMPO && pMedio.x <= inferiorDir.x + MARGEM_DE_ERRO_CAMPO &&
+					pMedio.y >= superiorEsq.y - MARGEM_DE_ERRO_CAMPO && pMedio.y >= superiorDir.y - MARGEM_DE_ERRO_CAMPO && 
+					pMedio.y <= inferiorEsq.y + MARGEM_DE_ERRO_CAMPO && pMedio.y <= inferiorDir.y + MARGEM_DE_ERRO_CAMPO) {
+
+					for (int i = 0; i < TAMANHO_VETOR_JOGADORES; i++) {
+						if (posJogadores[i].x != 0 && posJogadores[i].y != 0) {
+							int diffX = abs(pMedio.x - posJogadores[i].x);
+							int diffY = abs(pMedio.y - posJogadores[i].y);
+							if (diffX < 20 && diffY < 20) {
+								circle(imgAnalise, pMedio, 20, COR_LARANJA, 3, 8, 0);
+								posBola = pMedio;
+							}
+						}
+					}
+				}
+			}
+
+			// Procurar os jogadores
+			defineJogadores(posJogadores);
+			if (encontrouJogador3) {
+				jogaBonito();
+			} else {
+				jogaLouco();
+			}
+			// play(posJogador1[1].x, posJogador1[1].y, grauFrenteJogador1,
+			// 	 posJogador2[1].x, posJogador2[1].y, grauFrenteJogador2,
+			// 	 posJogador3[1].x, posJogador3[1].y, grauFrenteJogador3,
+			// 	 posBola.x, posBola.y,
+			// 	 superiorEsq,
+			// 	 fmax(superiorDir.x, inferiorDir.x) - fmin(superiorEsq.x, inferiorEsq.x),
+			// 	 fmax(inferiorEsq.y, inferiorDir.y) - fmin(superiorEsq.y, superiorDir.y));
+
+			if (!modoJogo) {
+				if (encontrouJogador1) {
+					circle(imgAnalise, posJogador1[1], 20, COR_VERMELHO, 3, 8, 0);
+					line(imgAnalise, posJogador1Aux[0], posJogador1Aux[1], COR_VERMELHO, 2, 8, 0);
+				}
+				
+				if (encontrouJogador2) {
+					circle(imgAnalise, posJogador2[1], 20, COR_AZUL, 3, 8, 0);
+					line(imgAnalise, posJogador2Aux[0], posJogador2Aux[1], COR_AZUL, 2, 8, 0);
+				}
+
+				if (encontrouJogador3) {
+					circle(imgAnalise, posJogador3[1], 20, COR_VERDE, 3, 8, 0);
+					line(imgAnalise, posJogador3Aux[0], posJogador3Aux[1], COR_VERDE, 2, 8, 0);
+				}
+			}
 		}
 		// copy only non-zero pixels from your image to original image
 		// for (int i = 0; i < imgPlayersRGB.rows; i++) {
@@ -452,95 +598,33 @@ int main( int argc, char* argv[] )
 		// 	cout << endl;
 		// }
 		// cout << "END" << endl;
-**********/
 
-	    namedWindow("imgOriginal", WINDOW_AUTOSIZE);
-	    imshow("imgOriginal", imgOriginal); //show the thresholded image
-/*
-	    // YCrCb
-	    namedWindow("imgYCrCb", WINDOW_AUTOSIZE);
-	    imshow("imgYCrCb", imgYCrCb);
+		if (!modoJogo) {
+			resize(imgAnalise, imgAnaliseMenor, Size(0,0), 0.5, 0.5, INTER_LINEAR);
+			namedWindow("imgAnalise", WINDOW_AUTOSIZE);
+			imshow("imgAnalise", imgAnaliseMenor); //show the thresholded image
+		}
 
-	    namedWindow("channelsYCrCb[0]", WINDOW_AUTOSIZE);
-	    imshow("channelsYCrCb[0]", channelsYCrCb[0]);
+	    namedWindow("TESTE", WINDOW_AUTOSIZE);
+	    imshow("TESTE", imgTeste);
 
-	    namedWindow("channelsYCrCb[1]", WINDOW_AUTOSIZE);
-	    imshow("channelsYCrCb[1]", channelsYCrCb[1]);
+	    namedWindow("TESTE_ORIGINAL", WINDOW_AUTOSIZE);
+	    imshow("TESTE_ORIGINAL", imgOriginal);
 
-	    namedWindow("channelsYCrCb[2]", WINDOW_AUTOSIZE);
-	    imshow("channelsYCrCb[2]", channelsYCrCb[2]);
+		// resize(imgOriginal, imgOriginalMenor, Size(0,0), 0.5, 0.5, INTER_LINEAR);
+		// namedWindow("imgOriginal", WINDOW_AUTOSIZE);
+		// imshow("imgOriginal", imgOriginal); //show the thresholded image
 
-	    // XYZ
-	    namedWindow("imgXYZ", WINDOW_AUTOSIZE);
-	    imshow("imgXYZ", imgXYZ);
+		// vector<Mat> channelsHSV(3);
+		// split(imgHSV, channelsHSV);
+	 //    namedWindow("channelsHSV[0]", WINDOW_AUTOSIZE);
+	 //    imshow("channelsHSV[0]", channelsHSV[0]);
 
-	    namedWindow("channelsXYZ[0]", WINDOW_AUTOSIZE);
-	    imshow("channelsXYZ[0]", channelsXYZ[0]);
+	 //    namedWindow("channelsHSV[1]", WINDOW_AUTOSIZE);
+	 //    imshow("channelsHSV[1]", channelsHSV[1]);
 
-	    namedWindow("channelsXYZ[1]", WINDOW_AUTOSIZE);
-	    imshow("channelsXYZ[1]", channelsXYZ[1]);
-
-	    namedWindow("channelsXYZ[2]", WINDOW_AUTOSIZE);
-	    imshow("channelsXYZ[2]", channelsXYZ[2]);
-
-	    // HLS
-	    namedWindow("imgHLS", WINDOW_AUTOSIZE);
-	    imshow("imgHLS", imgHLS);
-
-	    namedWindow("channelsHLS[0]", WINDOW_AUTOSIZE);
-	    imshow("channelsHLS[0]", channelsHLS[0]);
-
-	    namedWindow("channelsHLS[1]", WINDOW_AUTOSIZE);
-	    imshow("channelsHLS[1]", channelsHLS[1]);
-
-	    namedWindow("channelsHLS[2]", WINDOW_AUTOSIZE);
-	    imshow("channelsHLS[2]", channelsHLS[2]);
-
-	    // Lab
-	    namedWindow("imgLab", WINDOW_AUTOSIZE);
-	    imshow("imgLab", imgLab);
-
-	    namedWindow("channelsLab[0]", WINDOW_AUTOSIZE);
-	    imshow("channelsLab[0]", channelsLab[0]);
-
-	    namedWindow("channelsLab[1]", WINDOW_AUTOSIZE);
-	    imshow("channelsLab[1]", channelsLab[1]);
-
-	    namedWindow("channelsLab[2]", WINDOW_AUTOSIZE);
-	    imshow("channelsLab[2]", channelsLab[2]);
-
-	    // Luv
-	    namedWindow("imgLuv", WINDOW_AUTOSIZE);
-	    imshow("imgLuv", imgLuv);
-
-	    namedWindow("channelsLuv[0]", WINDOW_AUTOSIZE);
-	    imshow("channelsLuv[0]", channelsLuv[0]);
-
-	    namedWindow("channelsLuv[1]", WINDOW_AUTOSIZE);
-	    imshow("channelsLuv[1]", channelsLuv[1]);
-
-	    namedWindow("channelsLuv[2]", WINDOW_AUTOSIZE);
-	    imshow("channelsLuv[2]", channelsLuv[2]);
-
-	    // HSV
-	    namedWindow("imgHSV", WINDOW_AUTOSIZE);
-	    imshow("imgHSV", imgHSV);
-
-	    namedWindow("channelsHSV[0]", WINDOW_AUTOSIZE);
-	    imshow("channelsHSV[0]", channelsHSV[0]);
-
-	    namedWindow("channelsHSV[1]", WINDOW_AUTOSIZE);
-	    imshow("channelsHSV[1]", channelsHSV[1]);
-
-	    namedWindow("channelsHSV[2]", WINDOW_AUTOSIZE);
-	    imshow("channelsHSV[2]", channelsHSV[2]);
-*/
-
-		// namedWindow("imgHistEqualized", WINDOW_NORMAL);
-		// imshow( "imgHistEqualized", imgHistEqualized);
-
-		// namedWindow("imgThresholded", WINDOW_NORMAL);
-		// imshow( "imgThresholded", imgThresholded);
+	 //    namedWindow("channelsHSV[2]", WINDOW_AUTOSIZE);
+	 //    imshow("channelsHSV[2]", channelsHSV[2]);
 
 		// namedWindow("imgPlayersRGB", WINDOW_NORMAL);
 		// imshow( "imgPlayersRGB", imgOriginal);
@@ -552,73 +636,29 @@ int main( int argc, char* argv[] )
 		// imgPlayersHSV.release();
 		// mask_image.release();
 
-		if (saveBlueParametersOfTrackbar) {
-			ofstream blueParametersNewFile;
-			blueParametersNewFile.open("parameters/blue-color-parameters.txt");
-			blueParametersNewFile << "hL=" << hBlueL << endl;
-			blueParametersNewFile << "hH=" << hBlueH << endl;
-			blueParametersNewFile << "sL=" << sBlueL << endl;
-			blueParametersNewFile << "sH=" << sBlueH << endl;
-			blueParametersNewFile << "vL=" << sBlueL << endl;
-			blueParametersNewFile << "vH=" << sBlueH << endl;
-			blueParametersNewFile << "rL=" << rBlueL << endl;
-			blueParametersNewFile << "rH=" << rBlueH << endl;
-			blueParametersNewFile << "gL=" << gBlueL << endl;
-			blueParametersNewFile << "gH=" << gBlueH << endl;
-			blueParametersNewFile << "bL=" << bBlueL << endl;
-			blueParametersNewFile << "bH=" << bBlueH << endl;
-			blueParametersNewFile.close();
-			saveBlueParametersOfTrackbar = FALSE;
-		}
-
-		if (saveYellowParametersOfTrackbar) {
-			ofstream yellowParametersNewFile;
-			yellowParametersNewFile.open("parameters/yellow-color-parameters.txt");
-			yellowParametersNewFile << "hL=" << hYellowL << endl;
-			yellowParametersNewFile << "hH=" << hYellowH << endl;
-			yellowParametersNewFile << "sL=" << sYellowL << endl;
-			yellowParametersNewFile << "sH=" << sYellowH << endl;
-			yellowParametersNewFile << "vL=" << sYellowL << endl;
-			yellowParametersNewFile << "vH=" << sYellowH << endl;
-			yellowParametersNewFile << "rL=" << rYellowL << endl;
-			yellowParametersNewFile << "rH=" << rYellowH << endl;
-			yellowParametersNewFile << "gL=" << gYellowL << endl;
-			yellowParametersNewFile << "gH=" << gYellowH << endl;
-			yellowParametersNewFile << "bL=" << bYellowL << endl;
-			yellowParametersNewFile << "bH=" << bYellowH << endl;
-			yellowParametersNewFile.close();
-			saveYellowParametersOfTrackbar = FALSE;
-		}
-
-		if (saveBallParametersOfTrackbar) {
-			ofstream ballParametersNewFile;
-			ballParametersNewFile.open("parameters/ball-parameters.txt");
-			ballParametersNewFile << "areaL=" << areaBallL << endl;
-			ballParametersNewFile << "areaH=" << areaBallH << endl;
-			ballParametersNewFile.close();
-			saveBallParametersOfTrackbar = FALSE;
-		}
-
-		if (saveAreaParametersOfTrackbar) {
-			ofstream areaParametersNewFile;
-			areaParametersNewFile.open("parameters/area-parameters.txt");
-			areaParametersNewFile << "areaL=" << areaAreaL << endl;
-			areaParametersNewFile << "areaH=" << areaAreaH << endl;
-			areaParametersNewFile.close();
-			saveAreaParametersOfTrackbar = FALSE;
-		}
+		saveTrackbarsParameters();
 
 		if (waitKey(30) == 27) { //wait for 'esc' key press for 30ms. If 'esc' key is pressed, break loop
-			cout << "esc key is pressed by user" << endl;
+			cout << "Programa encerrado" << endl;
+			for (int j = 0; j < 20; j++) {
+				sendCommands(1, 0, 0, 0, 0);
+				sendCommands(2, 0, 0, 0, 0);
+				sendCommands(3, 0, 0, 0, 0);
+			}
 			break;
 		}
 	}
 
+	for (int j = 0; j < 20; j++) {
+		sendCommands(1, 0, 0, 0, 0);
+		sendCommands(2, 0, 0, 0, 0);
+		sendCommands(3, 0, 0, 0, 0);
+	}
 	return 0;
 }
 
 /**
- *     Função: createTrackbarsGlobal
++ *     Função: createTrackbarsGlobal
  * Parâmetros: -
  *    Retorno: -
  *  Descrição: Cria trackbars de variáveis globais.
@@ -636,6 +676,8 @@ void createTrackbarsGlobal() {
 	// createTrackbar("hBallH", "Control Ball", &hBallH, 180);
 	// createTrackbar("sBallL", "Control Ball", &sBallL, 255);
 	// createTrackbar("sBallH", "Control Ball", &sBallH, 255);
+	// createTrackbar("vBallL", "Control Ball", &vBallL, 255);
+	// createTrackbar("vBallH", "Control Ball", &vBallH, 255);
 
 	// ÁREA DO CAMPO
 	// namedWindow("Control Area", WINDOW_NORMAL);
@@ -645,40 +687,50 @@ void createTrackbarsGlobal() {
 
 	// JOGADORES
 	// namedWindow("Control Player", WINDOW_NORMAL);
-	// createTrackbar("vPlayerL", "Control Player", &vPlayerL, 40);
-	// createTrackbar("vPlayerH", "Control Player", &vPlayerH, 40);
-	// createTrackbar("areaPlayerL", "Control Player", &areaPlayerL, 1500);
-	// createTrackbar("areaPlayerH", "Control Player", &areaPlayerH, 1500);
+	// createTrackbar("areaJogadorL", "Control Player", &areaJogadorL, 1500);
+	// createTrackbar("areaJogadorH", "Control Player", &areaJogadorH, 1500);
 
 	// JOGADORES AZUL (COR TIME)
-	namedWindow("Control Blue", WINDOW_NORMAL);
-	createTrackbar("saveBlueParametersOfTrackbar", "Control Blue", &saveBlueParametersOfTrackbar, 1);
+	// namedWindow("Control Blue", WINDOW_NORMAL);
+	// createTrackbar("saveBlueParametersOfTrackbar", "Control Blue", &saveBlueParametersOfTrackbar, 1);
 	// createTrackbar("hBlueL", "Control Blue", &hBlueL, 180);
 	// createTrackbar("hBlueH", "Control Blue", &hBlueH, 180);
 	// createTrackbar("sBlueL", "Control Blue", &sBlueL, 255);
 	// createTrackbar("sBlueH", "Control Blue", &sBlueH, 255);
 	// createTrackbar("vBlueL", "Control Blue", &vBlueL, 255);
 	// createTrackbar("vBlueH", "Control Blue", &vBlueH, 255);
-	createTrackbar("rBlueL", "Control Blue", &rBlueL, 255);
-	createTrackbar("rBlueH", "Control Blue", &rBlueH, 255);
-	createTrackbar("gBlueL", "Control Blue", &gBlueL, 255);
-	createTrackbar("gBlueH", "Control Blue", &gBlueH, 255);
-	createTrackbar("bBlueL", "Control Blue", &bBlueL, 255);
-	createTrackbar("bBlueH", "Control Blue", &bBlueH, 255);
+	// createTrackbar("rBlueL", "Control Blue", &rBlueL, 255);
+	// createTrackbar("rBlueH", "Control Blue", &rBlueH, 255);
+	// createTrackbar("gBlueL", "Control Blue", &gBlueL, 255);
+	// createTrackbar("gBlueH", "Control Blue", &gBlueH, 255);
+	// createTrackbar("bBlueL", "Control Blue", &bBlueL, 255);
+	// createTrackbar("bBlueH", "Control Blue", &bBlueH, 255);
 
 	// JOGADORES AMARELO (COR TIME)
-	namedWindow("Control Yellow", WINDOW_NORMAL); //create a window called "Control"
-	createTrackbar("saveYellowParametersOfTrackbar", "Control Yellow", &saveYellowParametersOfTrackbar, 1);
+	// namedWindow("Control Yellow", WINDOW_NORMAL); //create a window called "Control"
+	// createTrackbar("saveYellowParametersOfTrackbar", "Control Yellow", &saveYellowParametersOfTrackbar, 1);
 	// createTrackbar("hYellowL", "Control Yellow", &hYellowL, 180);
 	// createTrackbar("hYellowH", "Control Yellow", &hYellowH, 180);
 	// createTrackbar("sYellowL", "Control Yellow", &sYellowL, 255);
 	// createTrackbar("sYellowH", "Control Yellow", &sYellowH, 255);
-	createTrackbar("rYellowL", "Control Yellow", &rYellowL, 255);
-	createTrackbar("rYellowH", "Control Yellow", &rYellowH, 255);
-	createTrackbar("gYellowL", "Control Yellow", &gYellowL, 255);
-	createTrackbar("gYellowH", "Control Yellow", &gYellowH, 255);
-	createTrackbar("bYellowL", "Control Yellow", &bYellowL, 255);
-	createTrackbar("bYellowH", "Control Yellow", &bYellowH, 255);
+	// createTrackbar("vYellowL", "Control Yellow", &vYellowL, 255);
+	// createTrackbar("vYellowH", "Control Yellow", &vYellowH, 255);
+	// createTrackbar("rYellowL", "Control Yellow", &rYellowL, 255);
+	// createTrackbar("rYellowH", "Control Yellow", &rYellowH, 255);
+	// createTrackbar("gYellowL", "Control Yellow", &gYellowL, 255);
+	// createTrackbar("gYellowH", "Control Yellow", &gYellowH, 255);
+	// createTrackbar("bYellowL", "Control Yellow", &bYellowL, 255);
+	// createTrackbar("bYellowH", "Control Yellow", &bYellowH, 255);
+
+	// JOGADORES ROXO (COR IDENTIFICAÇÃO JOGADOR)
+	// namedWindow("Control Purple", WINDOW_NORMAL); //create a window called "Control"
+	// createTrackbar("savePurpleParametersOfTrackbar", "Control Purple", &savePurpleParametersOfTrackbar, 1);
+	// createTrackbar("hPurpleL", "Control Purple", &hPurpleL, 180);
+	// createTrackbar("hPurpleH", "Control Purple", &hPurpleH, 180);
+	// createTrackbar("sPurpleL", "Control Purple", &sPurpleL, 255);
+	// createTrackbar("sPurpleH", "Control Purple", &sPurpleH, 255);
+	// createTrackbar("vPurpleL", "Control Purple", &vPurpleL, 255);
+	// createTrackbar("vPurpleH", "Control Purple", &vPurpleH, 255);
 
 	// JOGADORES VERDE (COR IDENTIFICAÇÃO JOGADOR)
 	// TODO: Fazer save dos parâmetros dessa cor.
@@ -691,16 +743,323 @@ void createTrackbarsGlobal() {
 	// createTrackbar("hGreenH", "Control Green", &hGreenH, 180);
 	// createTrackbar("sGreenL", "Control Green", &sGreenL, 255);
 	// createTrackbar("sGreenH", "Control Green", &sGreenH, 255);
+
+	// JOGADORES GERAL
+	namedWindow("Control Jogadores", WINDOW_NORMAL);
+	createTrackbar("saveJogadoresParametersOfTrackbar", "Control Jogadores", &saveJogadoresParametersOfTrackbar, 1);
+	createTrackbar("areaJogadorL", "Control Jogadores", &areaJogadorL, 700);
+	createTrackbar("areaJogadorH", "Control Jogadores", &areaJogadorH, 700);
+	createTrackbar("areaId1L", "Control Jogadores", &areaId1L, 500);
+	createTrackbar("areaId1H", "Control Jogadores", &areaId1H, 500);
+	createTrackbar("areaId2L", "Control Jogadores", &areaId2L, 500);
+	createTrackbar("areaId2H", "Control Jogadores", &areaId2H, 500);
+	createTrackbar("areaId3L", "Control Jogadores", &areaId3L, 800);
+	createTrackbar("areaId3H", "Control Jogadores", &areaId3H, 800);
 }
 
-void sendCommands(char serialPort[], int robot, int directionRight, int speedRight, int directionLeft, int speedLeft) {
-    char data[] = {'S', robot, '#', directionRight, '#', speedRight, '#', directionLeft, '#', speedLeft, 'E'};
-    FILE *file;
-    file = fopen(serialPort, "w"); // Opening usb device file. 
-    int i = 0;
-    for (i = 0 ; i < 13 ; i++) {
-        fprintf(file, "%c", data[i]); // Writing to the file.
-        //printf("%c\n", (char) data[i]);
-    }
-    fclose(file);
+void saveTrackbarsParameters() {
+	if (saveBlueParametersOfTrackbar) {
+		ofstream blueParametersNewFile;
+		blueParametersNewFile.open("parameters/blue-color-parameters.txt");
+		blueParametersNewFile << "hL=" << hBlueL << endl;
+		blueParametersNewFile << "hH=" << hBlueH << endl;
+		blueParametersNewFile << "sL=" << sBlueL << endl;
+		blueParametersNewFile << "sH=" << sBlueH << endl;
+		blueParametersNewFile << "vL=" << sBlueL << endl;
+		blueParametersNewFile << "vH=" << sBlueH << endl;
+		blueParametersNewFile << "rL=" << rBlueL << endl;
+		blueParametersNewFile << "rH=" << rBlueH << endl;
+		blueParametersNewFile << "gL=" << gBlueL << endl;
+		blueParametersNewFile << "gH=" << gBlueH << endl;
+		blueParametersNewFile << "bL=" << bBlueL << endl;
+		blueParametersNewFile << "bH=" << bBlueH << endl;
+		blueParametersNewFile.close();
+		saveBlueParametersOfTrackbar = FALSE;
+	}
+
+	if (saveYellowParametersOfTrackbar) {
+		ofstream yellowParametersNewFile;
+		yellowParametersNewFile.open("parameters/yellow-color-parameters.txt");
+		yellowParametersNewFile << "hL=" << hYellowL << endl;
+		yellowParametersNewFile << "hH=" << hYellowH << endl;
+		yellowParametersNewFile << "sL=" << sYellowL << endl;
+		yellowParametersNewFile << "sH=" << sYellowH << endl;
+		yellowParametersNewFile << "vL=" << sYellowL << endl;
+		yellowParametersNewFile << "vH=" << sYellowH << endl;
+		yellowParametersNewFile << "rL=" << rYellowL << endl;
+		yellowParametersNewFile << "rH=" << rYellowH << endl;
+		yellowParametersNewFile << "gL=" << gYellowL << endl;
+		yellowParametersNewFile << "gH=" << gYellowH << endl;
+		yellowParametersNewFile << "bL=" << bYellowL << endl;
+		yellowParametersNewFile << "bH=" << bYellowH << endl;
+		yellowParametersNewFile.close();
+		saveYellowParametersOfTrackbar = FALSE;
+	}
+
+	if (saveBallParametersOfTrackbar) {
+		ofstream ballParametersNewFile;
+		ballParametersNewFile.open("parameters/ball-parameters.txt");
+		ballParametersNewFile << "areaL=" << areaBallL << endl;
+		ballParametersNewFile << "areaH=" << areaBallH << endl;
+		ballParametersNewFile << "hL=" << hBallL << endl;
+		ballParametersNewFile << "hH=" << hBallH << endl;
+		ballParametersNewFile << "sL=" << sBallL << endl;
+		ballParametersNewFile << "sH=" << sBallH << endl;
+		ballParametersNewFile << "vL=" << vBallL << endl;
+		ballParametersNewFile << "vH=" << vBallH << endl;
+		ballParametersNewFile.close();
+		saveBallParametersOfTrackbar = FALSE;
+	}
+
+	if (savePurpleParametersOfTrackbar) {
+		ofstream purpleParametersNewFile;
+		purpleParametersNewFile.open("parameters/purple-color-parameters.txt");
+		purpleParametersNewFile << "hL=" << hPurpleL << endl;
+		purpleParametersNewFile << "hH=" << hPurpleH << endl;
+		purpleParametersNewFile << "sL=" << sPurpleL << endl;
+		purpleParametersNewFile << "sH=" << sPurpleH << endl;
+		purpleParametersNewFile << "vL=" << vPurpleL << endl;
+		purpleParametersNewFile << "vH=" << vPurpleH << endl;
+		purpleParametersNewFile.close();
+		savePurpleParametersOfTrackbar = FALSE;
+	}
+
+	if (saveAreaParametersOfTrackbar) {
+		ofstream areaParametersNewFile;
+		areaParametersNewFile.open("parameters/area-parameters.txt");
+		areaParametersNewFile << "areaL=" << areaAreaL << endl;
+		areaParametersNewFile << "areaH=" << areaAreaH << endl;
+		areaParametersNewFile.close();
+		saveAreaParametersOfTrackbar = FALSE;
+	}
+
+	if (saveJogadoresParametersOfTrackbar) {
+		ofstream jogadoresParametersNewFile;
+		jogadoresParametersNewFile.open("parameters/jogadores-parameters.txt");
+		jogadoresParametersNewFile << "areaJogadorL=" << areaJogadorL << endl;
+		jogadoresParametersNewFile << "areaJogadorH=" << areaJogadorH << endl;
+		jogadoresParametersNewFile << "areaId1L=" << areaId1L << endl;
+		jogadoresParametersNewFile << "areaId1H=" << areaId1H << endl;
+		jogadoresParametersNewFile << "areaId2L=" << areaId2L << endl;
+		jogadoresParametersNewFile << "areaId2H=" << areaId2H << endl;
+		jogadoresParametersNewFile << "areaId3L=" << areaId3L << endl;
+		jogadoresParametersNewFile << "areaId3H=" << areaId3H << endl;
+		jogadoresParametersNewFile.close();
+		saveJogadoresParametersOfTrackbar = FALSE;
+	}
+}
+
+void sendCommands(int robot, int dR, int sR, int dL, int sL) {
+	char directionRight[3], speedRight[4], directionLeft[3], speedLeft[4];
+	sprintf(directionRight, "%d", dR);
+	sprintf(directionLeft, "%d", dL);
+	sprintf(speedRight, "%d", sR);
+	sprintf(speedLeft, "%d", sL);
+
+	const int buf_max = 256;
+	char buf[buf_max];
+
+	if (!openConnection) {
+		char serialPort[] = "/dev/tty.usbmodem1411";
+		fd = serialport_init(serialPort, 9600);
+		if (fd == -1) {
+			cout << "couldn't open port" << endl;
+		} else {
+			openConnection = TRUE;
+		}
+	}
+
+	char data[18] = {'S', (char) (robot + 48)};
+	strcat(data, "#");
+	strcat(data, directionRight);
+	strcat(data, "#");
+	strcat(data, speedRight);
+	strcat(data, "#");
+	strcat(data, directionLeft);
+	strcat(data, "#");
+	strcat(data, speedLeft);
+	strcat(data, "E\0");
+
+	cout << data << endl;
+	sprintf(buf, "%s", data);
+	int rc = serialport_write(fd, buf);
+	if (rc == -1) cout << "error writing" << endl;
+}
+
+void defineJogadores(Point posJogadores[]) {
+	int menorDiffX, menorDiffY, melhorPos;
+
+	encontrouJogador1 = false;
+	encontrouJogador2 = false;
+	encontrouJogador3 = false;
+
+	for (int i = 0; i < 3; i++) {
+		menorDiffX = menorDiffY = 50;
+		melhorPos = -1;
+		for (int j = 0; j < TAMANHO_VETOR_JOGADORES; j++) {
+			if (posJogadores[j].x != 0 && posJogadores[j].y != 0) {
+				if (i == 0 && posJogador1[0].x != 0 && posJogador1[0].y != 0) {
+					int diffX = abs(posJogador1[0].x - posJogadores[j].x);
+					int diffY = abs(posJogador1[0].y - posJogadores[j].y);
+					if (diffX < menorDiffX && diffY < menorDiffY) {
+						melhorPos = j;
+						menorDiffX = diffX;
+						menorDiffY = diffY;
+					}
+				} else if (i == 1 && posJogador2[0].x != 0 && posJogador2[0].y != 0) {
+					int diffX = abs(posJogador2[0].x - posJogadores[j].x);
+					int diffY = abs(posJogador2[0].y - posJogadores[j].y);
+					if (diffX < menorDiffX && diffY < menorDiffY) {
+						melhorPos = j;
+						menorDiffX = diffX;
+						menorDiffY = diffY;
+					}
+				} else if (i == 2 && posJogador3[0].x != 0 && posJogador1[0].y != 0) {
+					int diffX = abs(posJogador3[0].x - posJogadores[j].x);
+					int diffY = abs(posJogador3[0].y - posJogadores[j].y);
+					if (diffX < menorDiffX && diffY < menorDiffY) {
+						melhorPos = j;
+						menorDiffX = diffX;
+						menorDiffY = diffY;
+					}
+				}
+			}
+		}
+		if (i == 0 && melhorPos != -1)
+			posJogador1[1] = posJogadores[melhorPos];
+		if (i == 1 && melhorPos != -1)
+			posJogador2[1] = posJogadores[melhorPos];
+		if (i == 2 && melhorPos != -1)
+			posJogador3[1] = posJogadores[melhorPos];
+	}
+
+	if (posJogador1[0].x != 0 && posJogador1[0].y != 0 && posJogador1[1].x != 0 && posJogador1[1].y != 0) {
+		encontrouJogador1 = true;
+		defineFrenteJogador(1);
+	}
+	if (posJogador2[0].x != 0 && posJogador2[0].y != 0 && posJogador2[1].x != 0 && posJogador2[1].y != 0) {
+		encontrouJogador2 = true;
+		defineFrenteJogador(2);
+	}
+	if (posJogador3[0].x != 0 && posJogador3[0].y != 0 && posJogador3[1].x != 0 && posJogador3[1].y != 0) {
+		encontrouJogador3 = true;
+		defineFrenteJogador(3);
+	}
+}
+
+void defineFrenteJogador(int jogador) {
+	if (jogador == 1) {
+		float graus;
+		// a = coeficiente angular da reta perpendicular a reta que liga os dois pontos do Robo 1
+		float a = (float) (posJogador1[1].x - posJogador1[0].x) / (float) (posJogador1[0].y - posJogador1[1].y);
+		int x = (posJogador1[0].x + posJogador1[1].x) / 2;
+		int y = (posJogador1[0].y + posJogador1[1].y) / 2;
+		float b = y - (a * x);
+		int yCheck = (a * posJogador1[1].x) + b;
+
+		posJogador1Aux[0] = Point(x, y);
+		posJogador1Aux[1] = Point(posJogador1[1].x, yCheck);
+
+		if (yCheck == posJogador1[1].y) {
+			if (posJogador1[1].x < x) {
+				graus = 90;
+			} else {
+				graus = 270;
+			}
+		} else if (yCheck > posJogador1[1].y) {
+			graus = atan(a) * 180 / PI + 180;
+		} else {
+			graus = atan(a) * 180 / PI;
+			if (graus < 0) graus = graus + 360;
+
+		}
+		// cout << "graus1: " << graus << endl;
+		grauFrenteJogador1 = graus;
+	} else if (jogador == 2) {
+		float graus;
+		float a = (float) (posJogador2[1].x - posJogador2[0].x) / (float) (posJogador2[0].y - posJogador2[1].y);
+		float teta = atan(0.4)*180/PI;
+		a = -(1.0f/(tan(atan(a)*180/PI+atan(0.4)*180/PI)));
+
+		int x = (posJogador2[0].x + posJogador2[1].x) / 2;
+		int y = (posJogador2[0].y + posJogador2[1].y) / 2;
+		float b = y - (a * x);
+		int yCheck = (a * posJogador2[1].x) + b;
+
+		posJogador2Aux[0] = Point(x, y);
+		posJogador2Aux[1] = Point(x * 2, (a * x * 2) + b);
+
+		if (yCheck == posJogador2[1].y) {
+			if (posJogador2[1].x < x) {
+				graus = 90;
+			} else {
+				graus = 270;
+			}
+		} else if (yCheck > posJogador2[1].y) {
+			graus = atan(a)*180/PI + 180;
+		} else {
+			graus = atan(a)*180/PI;
+			if(graus<0) graus = graus+360;
+
+		}
+		// cout << "graus2: " << graus << endl;
+		grauFrenteJogador2 = graus;
+	} else if (jogador == 3) {
+		float graus;
+		float a = (float) (posJogador3[1].x - posJogador3[0].x) / (float) (posJogador3[0].y - posJogador3[1].y);
+		float teta = atan(0.4)*180/PI;
+		a = -(1.0f/(tan(atan(a)*180/PI+atan(0.875)*180/PI)));
+
+		int x = (posJogador3[0].x + posJogador3[1].x) / 2;
+		int y = (posJogador3[0].y + posJogador3[1].y) / 2;
+		float b = y - (a * x);
+		int yCheck = (a * posJogador3[1].x) + b;
+
+		posJogador3Aux[0] = Point(x, y);
+		posJogador3Aux[1] = Point(x * 2, (a * x * 2) + b);
+
+		if (yCheck == posJogador3[1].y) {
+			if (posJogador3[1].x < x) {
+				graus = 90;
+			} else {
+				graus = 270;
+			}
+		} else if (yCheck > posJogador3[1].y) {
+			graus = atan(a)*180/PI + 180;
+		} else {
+			graus = atan(a)*180/PI;
+			if(graus<0) graus = graus+360;
+
+		}
+		// cout << "graus3: " << graus << endl;
+		grauFrenteJogador3 = graus;
+	}
+}
+
+void jogaBonito() {
+	float a = (float) (posJogador1[1].x - posJogador1[0].x) / (float) (posJogador1[0].y - posJogador1[1].y);
+	int x = (posJogador1[0].x + posJogador1[1].x) / 2;
+	int y = (posJogador1[0].y + posJogador1[1].y) / 2;
+	float b = y - (a * x);
+
+	float yCheck = (a * posBola.x) + b;
+	if (yCheck > posBola.y - 20 && yCheck < posBola.y + 20 &&
+		((posJogador3[1].x > posJogador3[0].x && posJogador3[1].x < posBola.x) ||
+		 (posJogador3[1].x < posJogador3[0].x && posJogador3[1].x > posBola.x))) {
+		sendCommands(3, 1, 300, 1, 300);
+	} else {
+		sendCommands(3, 1, 200, -1, 200);
+	}
+}
+
+void jogaLouco() {
+	int aleatorio1 = rand();
+	int aleatorio2 = rand();
+
+	int directionRight = (aleatorio1 % 9 == 0 ? 1 : -1);
+	int directionLeft = (aleatorio2 % 9 == 0 ? 1 : -1);
+	int speedRight = 275 + (aleatorio1 % 3 == 0 && aleatorio1 + 275 < 1000 ? aleatorio1 : 0);
+	int speedLeft = 275 + (aleatorio2 % 3 == 0 && aleatorio2 + 275 < 1000 ? aleatorio2 : 0);
+	sendCommands(3, directionRight, speedRight, directionLeft, speedLeft);
+	// sleep(3000);
 }
